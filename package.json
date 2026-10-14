@@ -1,0 +1,25 @@
+{
+  "name": "class-rollcall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "课堂随机点名系统（2024 软工 K 班 · 结对编程任务）",
+  "author": "李文龙 <102401324> / 杨泓 <102401322>",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node tests/run-all.js",
+    "test:lottery": "node tests/test-lottery.js",
+    "test:scorer": "node tests/test-scorer.js",
+    "test:importer": "node tests/test-importer.js",
+    "test:api": "node tests/test-api.js",
+    "test:app": "node tests/test-app.js",
+    "test:regressions": "node tests/test-regressions.js",
+    "smoke": "node tests/smoke-e2e.js",
+    "start": "node server/index.js",
+    "start:mysql": "node server/start-mysql.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
