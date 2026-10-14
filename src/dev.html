@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课堂随机点名系统 · 本地调试</title>
+<link rel="icon" href="data:,">
+<!--
+  本地调试页（不是交付物）。
+  用途：在正式界面（src/index.html）交付前，让主控能在真实浏览器里跑通。
+  启动方式：
+      node server/index.js
+      浏览器打开 http://127.0.0.1:8787/dev.html
+  SheetJS 用本地副本（lib/），不走 CDN——CDN 域名在国内存在被重置的风险。
+-->
+<style>
+  body { margin: 0; padding: 24px; font: 15px/1.6 system-ui, "Microsoft YaHei", sans-serif; color: #15233d; background: #f5f7fb; }
+  .dbg { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  h2 small { color: #748198; font-weight: 400; }
+  .warn { color: #854f0b; background: #faeeda; border: 1px solid #ef9f27; border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid #e5eaf3; background: #fff; border-radius: 8px; cursor: pointer; }
+  button.primary { background: #3867f4; color: #fff; border-color: #3867f4; }
+  button:disabled { opacity: .45; cursor: default; }
+  .file { padding: 6px 12px; border: 1px dashed #85b7eb; border-radius: 8px; background: #fff; }
+  .file input { margin-left: 8px; }
+  .error { background: #fcebeb; border: 1px solid #e24b4a; border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; }
+  .panel { background: #fff; border: 1px solid #e5eaf3; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .student .name { font-size: 32px; font-weight: 600; margin-right: 12px; }
+  .student .meta { color: #748198; }
+  .settle { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .result { margin-top: 12px; padding: 10px 12px; background: #e1f5ee; border-radius: 8px; }
+  .empty { color: #748198; margin: 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5eaf3; }
+  th { color: #748198; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<!-- SheetJS 本地副本，供 importer.js 使用（通过 globalThis.XLSX 传入） -->
+<script src="/lib/xlsx.full.min.js"></script>
+
+<div id="app">正在加载…</div>
+
+<script type="module" src="/js/dev-main.js"></script>
+</body>
+</html>
