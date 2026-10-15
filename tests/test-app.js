@@ -102,7 +102,7 @@ async function startServer(students) {
 
   console.log('\n[app] 启动与首屏');
 
-  await test('start() 注入八个事件回调，并拉取首屏名单', async () => {
+  await test('start() 注入联调事件回调，并拉取首屏名单', async () => {
     const srv = await startServer();
     const ui = stubUi();
     const app = createApp({ ui, api: createApiClient({ baseUrl: srv.baseUrl }) });
@@ -119,6 +119,10 @@ async function startServer(students) {
         'onRankingRequested',
         'onRollRequested',
         'onScoreSubmitted',
+        'onStudentsRequested',
+        'onRecoveryRequested',
+        'onProbabilitiesRequested',
+        'onReplayRequested',
       ].sort()
     );
     assert.strictEqual(ui.calls.students.length, 1);
@@ -228,6 +232,7 @@ async function startServer(students) {
     await ui.calls.handlers.onRollRequested();
     const first = ui.calls.rollResults[0].student.sno;
     assert.strictEqual(app.state.cursor, first);
+    await app.handlers.onScoreSubmitted({ present: 0 });
     await ui.calls.handlers.onRollRequested();
     const second = ui.calls.rollResults[1].student.sno;
     assert.notStrictEqual(second, first);
@@ -244,9 +249,11 @@ async function startServer(students) {
     await ui.calls.handlers.onRollRequested();
     const first = app.state.cursor;
     assert.ok(first);
+    await app.handlers.onScoreSubmitted({ present: 0 });
     await ui.calls.handlers.onModeChanged('random');
     await ui.calls.handlers.onRollRequested();
     assert.strictEqual(app.state.cursor, first);
+    await app.handlers.onScoreSubmitted({ present: 0 });
     await ui.calls.handlers.onModeChanged('sequence');
     await ui.calls.handlers.onRollRequested();
     assert.strictEqual(app.state.cursor, DEMO_ROSTER[1].sno);
@@ -263,7 +270,9 @@ async function startServer(students) {
     await app.start();
     await ui.calls.handlers.onModeChanged('sequence');
     await ui.calls.handlers.onRollRequested();
+    await app.handlers.onScoreSubmitted({ present: 0 });
     await ui.calls.handlers.onRollRequested();
+    await app.handlers.onScoreSubmitted({ present: 0 });
     await ui.calls.handlers.onRollRequested();
     assert.strictEqual(ui.calls.rollResults.length, 2, '两人名单只应点出两次');
     assert.ok(ui.calls.errors[0].msg.includes('本轮'));

@@ -8,7 +8,19 @@ import { createExporter } from './exporter.js';
 
 const chart = createRankingChart(globalThis.Chart);
 const ui = createUi(document, chart);
-const app = createApp({ ui, api: createApiClient(), importer, xlsx: globalThis.XLSX });
+let recoveryStorage = null;
+try {
+  recoveryStorage = window.sessionStorage;
+} catch {
+  /* 禁用存储时仍支持本页操作。 */
+}
+const app = createApp({
+  ui,
+  api: createApiClient(),
+  importer,
+  xlsx: globalThis.XLSX,
+  recoveryStorage,
+});
 app.setExporter(createExporter(globalThis.XLSX, (count) => ui.exportStarted(count)));
 app.start().catch(() => ui.renderError('INTERNAL', '页面启动失败，请刷新重试'));
 window.addEventListener('pagehide', () => chart.destroy());

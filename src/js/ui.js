@@ -16,6 +16,8 @@ export function createUi(document, chart) {
   let calls = 0;
   let preview = null;
   let previousFocus = null;
+  let recoveryPending = false;
+  let studentPage = { pageNo: 1, pageSize: 10, total: 0 };
   const pageInfo = {
     classroom: ['课堂点名', '从一次公平点名开始，让课堂参与有迹可循。'],
     students: ['学生名单', '把名单整理好，让每位同学都参与其中。'],
@@ -43,10 +45,13 @@ export function createUi(document, chart) {
       element.disabled = busy;
     });
     document.querySelectorAll('[data-mode]').forEach((button) => {
-      button.disabled = busy || (lastRoll && !settled);
+      button.disabled = busy || recoveryPending || (lastRoll && !settled);
     });
-    get('rollButton').disabled = busy || Boolean(lastRoll && !settled);
-    get('scoreButton').disabled = busy || settled;
+    get('rollButton').disabled = busy || recoveryPending || Boolean(lastRoll && !settled);
+    get('scoreButton').disabled = busy || recoveryPending || settled;
+    get('previousStudents').disabled = busy || studentPage.pageNo <= 1;
+    get('nextStudents').disabled =
+      busy || studentPage.pageNo * studentPage.pageSize >= studentPage.total;
     get('main').setAttribute('aria-busy', String(busy));
   }
 
@@ -106,6 +111,30 @@ export function createUi(document, chart) {
   return {
     init(h) {
       handlers = h;
+      const requestStudents = (pageNo = 1) =>
+        handlers.onStudentsRequested({
+          q: get('studentQuery').value,
+          pageNo,
+          pageSize: Number(get('studentPageSize').value),
+        });
+      get('studentSearch').addEventListener('submit', (event) => {
+        event.preventDefault();
+        requestStudents();
+      });
+      get('clearSearch').addEventListener('click', () => {
+        get('studentQuery').value = '';
+        requestStudents();
+      });
+      get('studentPageSize').addEventListener('change', () => requestStudents());
+      get('previousStudents').addEventListener('click', () =>
+        requestStudents(studentPage.pageNo - 1)
+      );
+      get('nextStudents').addEventListener('click', () => requestStudents(studentPage.pageNo + 1));
+      get('retryStudents').addEventListener('click', () => requestStudents(studentPage.pageNo));
+      get('recoverRecord').addEventListener('click', () => handlers.onRecoveryRequested());
+      get('replayButton').addEventListener('click', () => {
+        if (lastRoll?.mode === 'random') handlers.onReplayRequested(lastRoll.recordId);
+      });
       document
         .querySelectorAll('[data-page]')
         .forEach((button) =>
@@ -113,7 +142,7 @@ export function createUi(document, chart) {
         );
       document.querySelectorAll('[data-mode]').forEach((button) =>
         button.addEventListener('click', () => {
-          if (busy || (lastRoll && !settled)) return;
+          if (busy || recoveryPending || (lastRoll && !settled)) return;
           mode = button.dataset.mode;
           handlers.onModeChanged(mode);
           document.querySelectorAll('[data-mode]').forEach((item) => {
@@ -181,7 +210,7 @@ export function createUi(document, chart) {
       get('rankingLimit').addEventListener('change', () =>
         handlers.onRankingRequested(Number(get('rankingLimit').value))
       );
-      get('probabilityButton').addEventListener('click', () => openDialog('probabilityDialog'));
+      get('probabilityButton').addEventListener('click', () => handlers.onProbabilitiesRequested());
       get('dismissNotice').addEventListener('click', () => {
         get('notice').hidden = true;
       });
@@ -200,16 +229,24 @@ export function createUi(document, chart) {
       });
       updateButtons();
     },
-    renderStudents(rows, total) {
+    renderStudents(rows, total, meta = { pageNo: 1, pageSize: 10, rosterTotal: total, q: '' }) {
       get('studentTable').innerHTML = table(rows);
-      get('studentTotal').textContent = total;
-      get('sidebarCount').textContent = `当前名单 / ${total} 位同学`;
+      if (!rows.length && meta.q)
+        get('studentTable').textContent = '没有匹配的学生，请修改搜索条件。';
+      studentPage = { ...meta, total };
+      get('studentQuery').value = meta.q;
+      get('studentPageSize').value = String(meta.pageSize);
+      get('studentPageSummary').textContent =
+        `全班 ${meta.rosterTotal} 人 · 匹配 ${total} 人 · 第 ${meta.pageNo} / ${Math.max(1, Math.ceil(total / meta.pageSize))} 页`;
+      get('studentTotal').textContent = meta.rosterTotal;
+      get('sidebarCount').textContent = `当前名单 / ${meta.rosterTotal} 位同学`;
       get('connectionStatus').textContent = '已连接课堂服务';
+      updateButtons();
     },
     renderRollResult(result) {
       lastRoll = result;
       settled = false;
-      calls += 1;
+      if (!result.restored) calls += 1;
       get('sessionCalls').textContent = calls;
       get('pendingCalls').textContent = '1';
       get('studentName').textContent = result.student.name;
@@ -220,9 +257,54 @@ export function createUi(document, chart) {
       get('resultScore').hidden = false;
       get('resultScore').textContent = `当前积分 ${result.student.score}`;
       get('scoreButton').hidden = false;
+      get('replayButton').hidden = result.mode !== 'random';
       get('rollHelp').textContent = '请先登记本次表现并保存，避免漏记积分。';
       get('recentRecord').textContent = `${result.student.name} · 已点名，待登记表现`;
       updateButtons();
+    },
+    clearRoll() {
+      lastRoll = null;
+      settled = false;
+      if (get('scoreDialog').open) closeDialog('scoreDialog');
+      get('scoreButton').hidden = true;
+      get('replayButton').hidden = true;
+      get('pendingCalls').textContent = '0';
+      get('studentName').textContent = '请重新点名';
+      get('studentMeta').textContent = '原点名记录已失效';
+      get('resultScore').hidden = true;
+      get('resultCaption').textContent = '服务记录已变化';
+      get('rollHelp').textContent = '请重新点名，再登记课堂表现。';
+      get('recentRecord').textContent = '原本页记录已失效，未恢复其他记录。';
+      updateButtons();
+    },
+    renderRecovery({ pending, mode: restoredMode }) {
+      recoveryPending = pending;
+      get('recoverRecord').hidden = !pending;
+      if (restoredMode) {
+        mode = restoredMode;
+        document.querySelectorAll('[data-mode]').forEach((button) => {
+          button.classList.toggle('rc-button--primary', button.dataset.mode === mode);
+          button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+        });
+        get('rollButton').textContent = mode === 'random' ? '开始随机点名' : '点下一位同学';
+        get('modeHint').textContent =
+          mode === 'random'
+            ? '积分越高，随机被点到的概率越低'
+            : '按学号逐位点名，不增加随机点名次数';
+      }
+      updateButtons();
+    },
+    renderProbabilities({ minScore, rows }) {
+      get('probabilitySummary').textContent =
+        `当前最低积分 ${minScore} · ${rows.length} 人 · 概率合计 ${(rows.reduce((sum, row) => sum + row.probability, 0) * 100).toFixed(2)}%`;
+      get('probabilityTable').innerHTML =
+        `<table><thead><tr><th>学号</th><th>姓名</th><th>积分</th><th>权重</th><th>概率</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${escapeHtml(row.sno)}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.score)}</td><td>${row.weight.toFixed(4)}</td><td>${(row.probability * 100).toFixed(2)}%</td></tr>`).join('')}</tbody></table>`;
+      openDialog('probabilityDialog');
+    },
+    renderReplay(result) {
+      get('replayResult').textContent =
+        `记录 #${result.recordId} · 种子 ${result.seed} · 原记录学号 ${result.recordedSno} · 复算学号 ${result.picked.sno} · ${result.matched ? '结果一致' : '结果不一致，请核查'}`;
+      openDialog('replayDialog');
     },
     renderSettlement(result) {
       settled = result.settled === true;

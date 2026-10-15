@@ -35,7 +35,11 @@
           <h1 id="pageTitle">课堂点名</h1>
           <p class="rc-muted" id="pageDescription">从一次公平点名开始，让课堂参与有迹可循。</p>
         </div>
-        <span class="rc-badge" id="connectionStatus" role="status">正在连接服务</span>
+        <div class="rc-actions">
+          <span class="rc-badge" id="connectionStatus" role="status">正在连接服务</span>
+          <button id="retryStudents" class="rc-button" data-busy>刷新名单 / 重试</button>
+          <button id="recoverRecord" class="rc-button" data-busy hidden>核验点名状态</button>
+        </div>
       </header>
       <div id="notice" class="rc-notice" role="alert" hidden>
         <span id="noticeText"></span><button id="dismissNotice" aria-label="关闭提示">×</button>
@@ -101,13 +105,14 @@
               <p class="rc-muted">
                 积分影响抽签权重，负积分同学仍可正常参与。抽签和积分结算均由服务端完成。
               </p>
-              <button class="rc-button" id="probabilityButton">了解抽签规则</button>
+              <button class="rc-button" id="probabilityButton" data-busy>查看当前概率</button>
             </article>
           </aside>
         </div>
         <article class="rc-card rc-recent">
           <h3>最近一次课堂记录</h3>
           <p class="rc-muted" id="recentRecord">还没有课堂记录，从第一次点名开始吧。</p>
+          <button id="replayButton" class="rc-button" data-busy hidden>复演本次随机点名</button>
         </article>
       </section>
       <section id="page-students" hidden aria-label="学生名单">
@@ -124,7 +129,28 @@
               </button>
             </div>
           </div>
+          <form id="studentSearch" class="rc-actions">
+            <label
+              >搜索学号、姓名或专业
+              <input id="studentQuery" type="search" maxlength="100" data-busy
+            /></label>
+            <button class="rc-button" type="submit" data-busy>搜索</button>
+            <button class="rc-button" type="button" id="clearSearch" data-busy>清除搜索</button>
+            <label
+              >每页
+              <select id="studentPageSize" data-busy>
+                <option>10</option>
+                <option>20</option>
+                <option>50</option>
+              </select></label
+            >
+          </form>
+          <p id="studentPageSummary" class="rc-small rc-muted" aria-live="polite"></p>
           <div id="studentTable" class="rc-table-wrap"></div>
+          <div class="rc-actions">
+            <button id="previousStudents" class="rc-button" data-busy>上一页</button>
+            <button id="nextStudents" class="rc-button" data-busy>下一页</button>
+          </div>
           <p class="rc-small rc-muted">
             导入前会先校验并确认；已有学号只更新姓名和专业，积分与次数保留。
           </p>
@@ -238,7 +264,19 @@
         权重公式：<code>w = 1 / (1 + score − minScore)</code
         >。同一份名单中积分越高，概率越低；全员同分时概率相同。
       </p>
-      <p>当前版本暂不提供实时概率明细。每次点名使用当时名单与积分计算权重。</p>
+      <p id="probabilitySummary" class="rc-small rc-muted"></p>
+      <div id="probabilityTable" class="rc-table-wrap"></div>
+      <p>这是打开时的当前积分计算结果；每次打开重新读取。历史复演使用该次点名保存的快照。</p>
+    </dialog>
+    <dialog id="replayDialog" class="rc-dialog" aria-labelledby="replayTitle">
+      <div class="rc-dialog__header">
+        <h2 id="replayTitle">随机点名复演</h2>
+        <button class="rc-close" data-close="replayDialog" aria-label="关闭复演">×</button>
+      </div>
+      <p id="replayResult" role="status"></p>
+      <p class="rc-muted">
+        复演验证保存的种子与名单快照能够重现该结果，不单独证明整个系统没有人为干预。
+      </p>
     </dialog>
     <noscript>请启用 JavaScript 后使用课堂点名系统。</noscript>
   </body>

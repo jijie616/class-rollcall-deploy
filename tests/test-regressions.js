@@ -193,6 +193,23 @@ async function startupTest() {
 
 (async () => {
   await test('MySQL 入口真实监听 HTTP，驱动使用禁止联网的替身', startupTest);
+  await test('MySQL 恢复查询在同一事务读取分项及当前积分，不修改结算', async () => {
+    const harness = mysqlHarness();
+    const api = createApi({ store: harness.store });
+    await api.settleRoll(payload(1));
+    const before = structuredClone(harness.data());
+    harness.events.length = 0;
+    const record = await api.getRecord({ id: 1 });
+    assert.equal(record.settled, true);
+    assert.equal(record.settlement.delta, 4.5);
+    assert.equal(record.settlement.score, 4.5);
+    assert.deepEqual(record.settlement.deltas, { present: 1, repeat: 0.5, answer: 3 });
+    assert.deepEqual(harness.data(), before);
+    assert.equal(harness.events.filter((e) => e === 'acquire').length, 1);
+    assert.ok(harness.events.some((e) => e.includes('roll_records') && e.includes('FOR UPDATE')));
+    assert.ok(harness.events.some((e) => e.includes('students') && e.includes('FOR UPDATE')));
+    assert.ok(harness.events.includes('commit'));
+  });
 
   for (const method of ['applyStudentDelta', 'addScoreLogs']) {
     await test('结算在 ' + method + ' 失败时完整回滚，并能重新结算', async () => {

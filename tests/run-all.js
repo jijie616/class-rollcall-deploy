@@ -13,6 +13,9 @@ const FILES = [
   'test-api.js',
   'test-app.js',
   'test-regressions.js',
+  'test-chart.js',
+  'test-exporter.js',
+  'test-integration.js',
 ];
 
 let failed = 0;
@@ -38,7 +41,6 @@ if (failed > 0) {
   process.exit(1);
 }
 console.log('全部测试文件通过（' + FILES.length + ' / ' + FILES.length + '）');
-console.log('未纳入本入口的测试（由杨泓负责）：test-exporter / test-chart / test-fx');
 console.log(
   '端到端冒烟需先启动服务：node server/index.js，再 SMOKE_BASE=... node tests/smoke-e2e.js'
 );

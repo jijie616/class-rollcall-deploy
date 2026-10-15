@@ -6,11 +6,11 @@
 // 这样前端布局改版不需要动主控逻辑，两人可以并行开发。
 //
 // 与 ui.js 的契约见分工报告 3.4.2：
-//   ui.init(handlers) 注入六个事件回调，app 侧调用 render* 系列渲染入口。
+//   回调与恢复契约见 docs/联调接口与恢复说明_20261015.md。
 
 import { ApiError } from './api.js';
 
-export function createApp({ ui, api, importer, xlsx }) {
+export function createApp({ ui, api, importer, xlsx, recoveryStorage = null }) {
   if (!ui || typeof ui.init !== 'function') {
     throw new TypeError('createApp: 需要 ui 对象（含 init 方法）');
   }
@@ -26,7 +26,96 @@ export function createApp({ ui, api, importer, xlsx }) {
     lastSettlement: null,
     pendingImport: null,
     busy: false,
+    query: { q: '', pageNo: 1, pageSize: 10 },
+    matchedTotal: 0,
+    studentsLoaded: false,
+    recoveryPending: false,
   };
+  const recoveryKey = 'class-rollcall.session.v1';
+  let savedSession = null;
+
+  function persistSession() {
+    if (!recoveryStorage) return;
+    try {
+      recoveryStorage.setItem(
+        recoveryKey,
+        JSON.stringify({
+          cursor: state.cursor,
+          mode: state.mode,
+          record: state.lastRoll
+            ? {
+                recordId: state.lastRoll.recordId,
+                calledAt: state.lastRoll.calledAt,
+                sno: state.lastRoll.student.sno,
+                mode: state.lastRoll.mode,
+              }
+            : null,
+        })
+      );
+    } catch {
+      /* 浏览器禁止存储时，本页的服务端结果仍然有效。 */
+    }
+  }
+
+  function setRecoveryPending(value) {
+    state.recoveryPending = value;
+    ui.renderRecovery?.({ pending: value, mode: state.mode });
+  }
+
+  function displaySettlement(result) {
+    state.lastSettlement = result;
+    const student = state.students.find((s) => s.sno === result.sno);
+    if (student) student.score = result.score;
+    ui.renderSettlement({ ...result, settled: true });
+    persistSession();
+  }
+
+  async function recoverSession() {
+    const expected = savedSession?.record || state.lastRoll;
+    if (!expected) {
+      setRecoveryPending(false);
+      return;
+    }
+    setRecoveryPending(true);
+    try {
+      const record = await api.getRecord({ id: expected.recordId });
+      const sno = expected.sno || expected.student?.sno;
+      if (
+        record.calledAt !== expected.calledAt ||
+        record.student.sno !== sno ||
+        record.mode !== expected.mode
+      ) {
+        throw new ApiError('NOT_FOUND', '原记录已失效，已清除本页恢复信息，请重新点名');
+      }
+      if (savedSession) {
+        state.cursor = savedSession.cursor;
+        state.mode = savedSession.mode;
+      }
+      state.lastRoll = {
+        recordId: record.recordId,
+        calledAt: record.calledAt,
+        student: record.student,
+        mode: record.mode,
+      };
+      state.lastSettlement = null;
+      ui.renderRollResult({ ...state.lastRoll, restored: true });
+      if (record.settled) displaySettlement(record.settlement);
+      savedSession = null;
+      setRecoveryPending(false);
+      persistSession();
+    } catch (error) {
+      if (error.code === 'NOT_FOUND') {
+        savedSession = null;
+        state.lastRoll = null;
+        state.lastSettlement = null;
+        state.cursor = null;
+        ui.clearRoll?.();
+        setRecoveryPending(false);
+        persistSession();
+      }
+      throw error;
+    }
+  }
 
   /** 统一的错误出口：翻译成人能看懂的文案后交给界面 */
   function reportError(err) {
@@ -52,14 +141,43 @@ export function createApp({ ui, api, importer, xlsx }) {
   }
 
   async function refreshStudents() {
-    const r = await api.listStudents({});
+    const r = await api.listStudents(state.query);
+    const rosterTotal = state.query.q ? (await api.listStudents({ pageSize: 1 })).total : r.total;
+    const lastPage = Math.max(1, Math.ceil(r.total / state.query.pageSize));
+    if (state.query.pageNo > lastPage) {
+      state.query.pageNo = lastPage;
+      return refreshStudents();
+    }
     state.students = r.rows;
-    state.total = r.total;
-    ui.renderStudents(r.rows, r.total);
+    state.total = rosterTotal;
+    state.matchedTotal = r.total;
+    state.studentsLoaded = true;
+    ui.renderStudents(r.rows, r.total, { ...state.query, rosterTotal });
     return r;
   }
 
   const handlers = {
+    async onStudentsRequested(query = {}) {
+      await run(async () => {
+        const pageNo = Number(query.pageNo ?? state.query.pageNo);
+        const pageSize = Number(query.pageSize ?? state.query.pageSize);
+        if (!Number.isSafeInteger(pageNo) || pageNo < 1 || ![10, 20, 50].includes(pageSize)) {
+          throw new ApiError('VALIDATION_ERROR', '分页参数无效');
+        }
+        state.query = { q: String(query.q ?? state.query.q).trim(), pageNo, pageSize };
+        await refreshStudents();
+        if (state.recoveryPending) await recoverSession();
+      });
+    },
+    async onRecoveryRequested() {
+      await run(recoverSession);
+    },
+    async onProbabilitiesRequested() {
+      await run(async () => ui.renderProbabilities(await api.probabilities()));
+    },
+    async onReplayRequested(recordId) {
+      await run(async () => ui.renderReplay(await api.replayRoll({ id: recordId })));
+    },
     // 选文件只解析、干跑校验和预览；确认回调才允许写入。
     async onImportRequested(file) {
       if (!file) return;
@@ -141,21 +259,36 @@ export function createApp({ ui, api, importer, xlsx }) {
         ui.renderError('VALIDATION_ERROR', '不支持的点名模式：' + mode);
         return;
       }
+      if (state.recoveryPending || (state.lastRoll && !state.lastSettlement)) {
+        ui.renderError('VALIDATION_ERROR', '请先结算当前点名记录');
+        return;
+      }
       state.mode = mode;
+      persistSession();
       // 随机点名不影响顺序模式的进度，只有顺序轮次结束才重置。
     },
 
     // 点名：随机模式走 /roll，顺序模式走 /roll/next
     async onRollRequested() {
       await run(async () => {
-        if (state.students.length === 0) {
+        if (state.recoveryPending || (state.lastRoll && !state.lastSettlement)) {
+          throw new ApiError('VALIDATION_ERROR', '请先核验并结算当前点名记录');
+        }
+        if (!state.studentsLoaded) await refreshStudents();
+        if (state.total === 0) {
           ui.renderError('EMPTY_ROSTER', '名单为空，请先导入学生名单');
           return;
         }
         if (state.mode === 'random') {
           const r = await api.roll({ mode: 'random' });
-          state.lastRoll = { recordId: r.recordId, student: r.student, mode: 'random' };
+          state.lastRoll = {
+            recordId: r.recordId,
+            calledAt: r.calledAt,
+            student: r.student,
+            mode: 'random',
+          };
           state.lastSettlement = null;
+          persistSession();
           ui.renderRollResult({ student: r.student, mode: 'random', recordId: r.recordId });
           await refreshStudents();
           return;
@@ -164,11 +297,18 @@ export function createApp({ ui, api, importer, xlsx }) {
         if (r.next === null) {
           ui.renderError('VALIDATION_ERROR', '本轮顺序点名已完成，可重新开始新一轮');
           state.cursor = null;
+          persistSession();
           return;
         }
         state.cursor = r.next.sno;
-        state.lastRoll = { recordId: r.recordId, student: r.next, mode: 'sequence' };
+        state.lastRoll = {
+          recordId: r.recordId,
+          calledAt: r.calledAt,
+          student: r.next,
+          mode: 'sequence',
+        };
         state.lastSettlement = null;
+        persistSession();
         ui.renderRollResult({ student: r.next, mode: 'sequence', recordId: r.recordId });
       });
     },
@@ -180,22 +320,25 @@ export function createApp({ ui, api, importer, xlsx }) {
           ui.renderError('VALIDATION_ERROR', '请先点名，再登记表现');
           return;
         }
-        const r = await api.settleRoll({
-          id: state.lastRoll.recordId,
-          present: payload.present,
-          repeat: payload.repeat,
-          answerBonus: payload.answerBonus,
-        });
-        state.lastSettlement = r;
-        // 结算后本地同步该学生的积分，避免"界面数字与服务端不一致"
-        const idx = state.students.findIndex((s) => s.sno === r.sno);
-        if (idx >= 0) state.students[idx].score = r.score;
-        ui.renderSettlement({
-          deltas: r.deltas,
-          delta: r.delta,
-          score: r.score,
-          settled: true,
-        });
+        if (state.recoveryPending) {
+          await recoverSession();
+          if (state.lastSettlement || !state.lastRoll) return;
+        }
+        try {
+          const r = await api.settleRoll({
+            id: state.lastRoll.recordId,
+            present: payload.present,
+            repeat: payload.repeat,
+            answerBonus: payload.answerBonus,
+          });
+          displaySettlement(r);
+        } catch (error) {
+          if (!state.lastSettlement && ['NETWORK_ERROR', 'ALREADY_SETTLED'].includes(error.code)) {
+            await recoverSession();
+            if (state.lastSettlement) return;
+          }
+          throw error;
+        }
       });
     },
 
@@ -226,7 +369,27 @@ export function createApp({ ui, api, importer, xlsx }) {
   /** 启动：注入回调、拉首屏数据 */
   async function start() {
     ui.init(handlers);
-    await run(() => refreshStudents());
+    try {
+      const value = JSON.parse(recoveryStorage?.getItem(recoveryKey) || 'null');
+      if (
+        value?.record &&
+        Number.isSafeInteger(value.record.recordId) &&
+        value.record.recordId > 0 &&
+        typeof value.record.calledAt === 'string' &&
+        typeof value.record.sno === 'string' &&
+        ['random', 'sequence'].includes(value.record.mode) &&
+        ['random', 'sequence'].includes(value.mode) &&
+        (value.cursor === null || typeof value.cursor === 'string')
+      )
+        savedSession = value;
+    } catch {
+      /* 损坏的本页状态不用于恢复任何全库记录。 */
+    }
+    if (savedSession) setRecoveryPending(true);
+    await run(async () => {
+      await refreshStudents();
+      if (savedSession) await recoverSession();
+    });
   }
 
   return {

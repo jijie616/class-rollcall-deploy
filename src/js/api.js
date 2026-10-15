@@ -112,5 +112,8 @@ export function createApiClient({ baseUrl = '/api', fetchImpl } = {}) {
     replayRoll({ id } = {}) {
       return request('GET', '/roll/' + encodeURIComponent(String(id)) + '/replay');
     },
+    getRecord({ id } = {}) {
+      return request('GET', '/roll/' + encodeURIComponent(String(id)));
+    },
   };
 }

@@ -9,7 +9,7 @@
 //   STORE      'memory'（默认，用内置演示名单）| 'mysql'
 //   DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME   —— STORE=mysql 时必填
 //
-// 说明：本地开发默认用内存存储，不需要数据库即可完整跑通 11 个端点；
+// 说明：本地开发默认用内存存储，不需要数据库即可完整跑通 12 个端点；
 //      部署时把 STORE 切到 mysql。数据库凭据只存在于本进程环境变量中，
 //      前端永远拿不到（对应"前端无需数据库密码"的约定）。
 
@@ -158,7 +158,7 @@ function startServer({ port = PORT, store } = {}) {
   const server = createServer({ store });
   server.listen(port, () => {
     console.log('课堂随机点名系统 · 中间层已启动');
-    console.log('  地址：http://127.0.0.1:' + server.address().port + '/dev.html');
+    console.log('  地址：http://127.0.0.1:' + server.address().port + '/');
     console.log('  存储：' + STORE_KIND);
     if (STORE_KIND === 'memory') {
       console.log('  提示：内存模式重启后数据清空，仅用于本地开发与演示');

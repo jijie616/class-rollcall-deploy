@@ -227,6 +227,24 @@ h3 {
   align-items: center;
   gap: 12px;
 }
+#studentSearch {
+  margin: 20px 0 12px;
+}
+#studentSearch label {
+  max-width: 100%;
+}
+#studentQuery {
+  display: block;
+  width: 280px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dbe3f0;
+  border-radius: 8px;
+  background: white;
+}
+#studentPageSummary {
+  margin: 12px 0;
+}
 .rc-stage > .rc-small {
   margin-top: 24px;
 }

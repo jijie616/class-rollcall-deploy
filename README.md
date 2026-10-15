@@ -20,6 +20,8 @@
 
 ## 当前进度
 
+**2026-10-15 联调版本**：已接入杨泓的正式前端，补齐搜索分页、当前概率表、随机复演、本页刷新恢复和结算异常核验。最新契约见 [联调接口与恢复说明](docs/联调接口与恢复说明_20261015.md)。真实 MySQL、线上部署和最终交付仍待完成。
+
 | 模块 | 内容 | 状态 |
 | :-- | :-- | :-- |
 | A1 | 工程脚手架 | ✅ 目录、README、`.prettierrc`、`.gitignore`、`package.json` |
@@ -27,24 +29,27 @@
 | A3 | Excel 名单导入 | ✅ `src/js/importer.js`（表头识别、行校验、数字型学号告警），23 项测试通过 |
 | A4/A5 | 加权随机抽签 / 顺序点名 | ✅ `server/lottery.js`，23 项测试通过 |
 | A6 | 积分结算引擎 | ✅ `server/scorer.js`，24 项测试通过 |
-| A7 | HTTP 中间层 | ✅ 11 个端点全部实现，`server/api.js` + `server/index.js` + 两套存储；41 项接口测试 + 12 步端到端冒烟通过。⚠️ `server/store-mysql.js` **未在真实 MySQL 上验证** |
+| A7 | HTTP 中间层 | ✅ 12 个端点（新增单条记录恢复查询），事务与恢复回归通过。⚠️ `server/store-mysql.js` **未在真实 MySQL 上验证** |
 | A8 | 主控状态机 | ✅ `src/js/app.js` + `src/js/api.js`（前端 HTTP 客户端），24 项测试通过（用桩件替 ui.js，连真实服务跑） |
 | A9 | 部署上线 | ⬜ 待做 |
-| A10 | 本人模块测试 | ✅ 6 个测试文件 + 端到端冒烟，见下表 |
+| A10 | 统一测试 | ✅ 9 个测试文件，包含图表、导出与联调回归，见下表 |
 | B1 | 原型（Penpot） | ✅ 杨泓已完成 v1：<br>https://design.penpot.app/#/view?file-id=129977ce-683b-806a-8008-c9a8777d1b76&page-id=a8284521-479e-8097-8008-c9ab39c73ec7&section=interactions&index=0&share-id=19050c5c-0739-4032-85f9-24c2bfd1e28b&zoom=fit |
-| B4 | UI 组件层 | 当前实现接口 v2.1（双方终审记录待补）（`ui.init` + 原有渲染入口 + `renderImportPreview`，见 `docs/分工报告.md` 3.4.2）；主控已按该接口写并被测试覆盖，杨泓按同一接口实现即可对接 |
-| B2 / B3 / B5–B9 | 图表 / 导出 / 进阶 / 视频 / 博客 | ⬜ 待做 |
+| B4 | UI 组件层 | ✅ 正式课堂、名单、排行榜与弹窗；本轮扩展 12 个事件回调，待双方最终验收 |
+| B2 / B3 / B5 | 图表 / 导出 / 进阶 | ✅ 双轴图表、全量 Excel、大屏；本轮补搜索、概率、复演；真实手机待验收 |
+| 视频 / 博客 | 最终交付材料 | ⬜ 李文龙负责视频全流程，杨泓提供素材；双方个人记录分别维护 |
 
-**测试总量**：6 个测试文件共 153 项测试用例，另加 12 步端到端冒烟，全部通过。
+**测试口径**：9 个测试文件，原 153 项 + 1 项 MySQL 恢复查询 + 11 项联调回归，共 165 项具名用例；图表和导出另按 2 个测试文件记录，不将内部断言累加为用例。HTTP 冒烟另计 12 步。
 
-| 测试文件 | 断言数 | 覆盖对象 |
+| 测试文件 | 用例数 / 记录单位 | 覆盖对象 |
 | :-- | --: | :-- |
 | `test-lottery.js` | 23 | 权重、概率、抽样、复演、顺序点名 |
 | `test-scorer.js` | 24 | 计分分支、0.5 步长精度、类型陷阱 |
 | `test-importer.js` | 23 | 表头识别、行校验、学号类型 |
 | `test-api.js` | 41 | 11 个端点 + 错误码 + 4 项接线回归 |
 | `test-app.js` | 24 | 主控状态机（桩件 UI + 真实服务） |
-| `test-regressions.js` | 18 | 启动、事务失败回滚、并发结算、MySQL 驱动替身回归 |
+| `test-regressions.js` | 19 | 启动、事务失败回滚、并发结算、MySQL 驱动替身及恢复查询 |
+| `test-integration.js` | 11 | 响应丢失、刷新恢复、身份核对、分页、重试、概率与复演 |
+| `test-chart.js` / `test-exporter.js` | 2 个文件 | 图表生命周期、真实 xlsx 回读及完整导出 |
 | `smoke-e2e.js` | 12 步 | 真实服务进程上的完整业务链路 |
 
 ## 目录结构
@@ -57,7 +62,7 @@ class-rollcall/
 ├─ sql/schema.sql            # 建表脚本（三张表，兼容 MySQL 5.5 ~ 8.0）
 ├─ server/                   # Node 中间层：抽签与结算在这里运行，不进浏览器
 │  ├─ index.js               # HTTP 服务 + 静态托管
-│  ├─ api.js                 # 11 个端点的处理逻辑
+│  ├─ api.js                 # 12 个端点的处理逻辑
 │  ├─ lottery.js             # A4/A5 加权抽签 + 顺序点名 + 复演
 │  ├─ scorer.js              # A6 积分结算
 │  ├─ errors.js              # 统一错误码与响应信封
@@ -65,16 +70,16 @@ class-rollcall/
 │  ├─ store-mysql.js         # MySQL 存储（部署用，⚠️ 未验证）
 │  └─ start-mysql.js         # MySQL 模式启动器（读 .env）
 ├─ src/
-│  ├─ index.html             # B4 杨泓（正式界面，未交付）
-│  ├─ dev.html               # ⚠️ 临时调试页，B4 交付后删除
-│  ├─ css/style.css          # B4 杨泓（未交付）
+│  ├─ index.html             # 正式界面，根路径访问
+│  ├─ dev.html               # 临时调试页，保留排查参照
+│  ├─ css/style.css          # 正式界面样式与适配
 │  └─ js/
 │     ├─ api.js              # A7 前端 HTTP 客户端
 │     ├─ app.js              # A8 主控状态机
 │     ├─ importer.js         # A3 Excel 解析与校验（SheetJS 通过参数注入）
-│     ├─ ui.debug.js         # ⚠️ 临时调试界面，B4 交付后删除
-│     ├─ dev-main.js         # ⚠️ 调试页启动脚本，B4 交付后删除
-│     └─ （exporter / chart / ui / fx 由杨泓补齐）
+│     ├─ ui.debug.js         # 临时调试界面
+│     ├─ dev-main.js         # 调试页启动脚本
+│     └─ main.js / ui.js / chart.js / exporter.js # 正式界面组装、渲染、图表及导出
 ├─ lib/                      # 第三方库本地副本（SheetJS 0.18.5、Chart.js 4.4.1）
 └─ tests/
    ├─ run-all.js             # 测试总入口
@@ -83,7 +88,9 @@ class-rollcall/
    ├─ test-importer.js       # 23 项
    ├─ test-api.js            # 41 项（含 4 项接线回归）
    ├─ test-app.js            # 24 项（含真实 xlsx 导入确认链路）
-   ├─ test-regressions.js    # 18 项（启动、事务故障与并发）
+   ├─ test-regressions.js    # 19 项（启动、事务故障、并发和恢复查询）
+   ├─ test-integration.js    # 11 项新增联调回归
+   ├─ test-chart.js / test-exporter.js # 前端模块验证
    └─ smoke-e2e.js           # 12 步端到端冒烟（需先启动服务）
 ```
 
@@ -96,10 +103,10 @@ class-rollcall/
 node tests/run-all.js
 
 # 启动中间层（默认内存存储 + 8 人演示名单）
-node server/index.js            # → http://127.0.0.1:8787/dev.html
+node server/index.js            # → http://127.0.0.1:8787/
 
 # 对运行中的服务跑端到端冒烟
-SMOKE_BASE=http://127.0.0.1:8787 node tests/smoke-e2e.js
+node tests/smoke-e2e.js          # 默认连接 8787；会写入测试数据，请仅对演示/测试库执行
 ```
 
 单元测试只用 Node 内置的 `assert`，不引入测试框架，`npm install` 不装任何东西（MySQL 模式才需要 `npm i mysql2`）。
@@ -158,7 +165,7 @@ SheetJS 已实测：生成 xlsx → 回读 → 文本型学号 `0012345` 的前�
 3. 托管环境能否出网连接 3306（本机已实测可用，托管环境未验）。
 4. 作业平台 `code.educoder.net/projects` 是否支持合并请求（MR）。
 5. 免费 MySQL 主机的注册与续期规则。
-6. Excel 文件选择、预览、取消、确认及异常文件提示已在真实 Chrome 隔离内存环境验证，正式 UI 交付后仍需验收。
+6. 真实手机验收、最终部署环境与正式数据库上的完整联调。
 
 ## 浏览器验证记录（2026-10-14）
 
@@ -188,13 +195,13 @@ node server/index.js
 1. 在 B4 正式界面交付前，让主控能在真实浏览器里跑通并被验证；
 2. 给杨泓一个可运行的活参照——他要实现的原有渲染入口、导入预览入口与八个事件回调，在这里都有最小实现。
 
-它只把数据摆出来，不做视觉设计。**B4 的 `src/index.html`、`src/css/style.css`、`src/js/ui.js` 交付后，这三个文件应当删除。**
+它只把数据摆出来，不做视觉设计。目前保留作排查参照，正式使用根路径 `/`；调试页不作为最终界面验收对象。
 
 ## 分工与协作
 
 - 完整分工、接口约定、git 流程、AI 使用边界见 **`docs/分工报告.md`**。
-- 该文档的第三节（接口约定 v2.0）是两人协作的**当前实现基线（双方终审记录待补）**，改动需双方确认。
-- 纪律：不改对方负责的文件；需要对方改，走 MR 评论或提 Issue；`main` 分支只接受 MR 合并。
+- 第三节记录 v2.1 原契约；本轮新增契约以 `docs/联调接口与恢复说明_20261015.md` 为准，双方终审记录待补。
+- 当前在联调分支接收并扩展前端，保留双方原提交；后续完成交叉复审后合入 main。
 
 
 ## 2026-10-14 修复与安全复查
@@ -203,4 +210,4 @@ MySQL 启动器现在显式调用 `startServer()`。所有 HTTP 写操作使用 
 
 主控保留顺序游标，忙碌期间忽略重复提交。Excel 导入先解析及干跑校验，再显示 `renderImportPreview({fileName,total,conflicts,warnings})`，只有 `onImportConfirmed()` 调 `api.commitImport`；`onImportCancelled()` 清除预览而不写库。正式 UI 需接入这两个新增回调。调试 UI 同步适配，并修复重绘丢名单、错误后按钮无法恢复的问题。
 
-当前测试总量为 153 项（6 个文件），另有 12 步 HTTP 冒烟。测试产物放在 `output/playwright/`，已忽略 Git。服务根路径 `/` 仍为 404，因为正式 `src/index.html` 尚未交付；使用 `/dev.html` 调试。
+上节为 10/14 的历史验证记录，当时为 153 项、根路径未提供正式页面。10/15 已接入正式界面，根路径 `/` 可用；当前测试口径见本文顶部，运行产物仍放在 Git 忽略的 `output/playwright/`。

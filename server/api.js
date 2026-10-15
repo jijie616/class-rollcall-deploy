@@ -183,6 +183,7 @@ function createApi({ store }) {
 
         return {
           recordId: id,
+          calledAt: (await store.getRoll(id)).calledAt,
           student: {
             sno: result.picked.sno,
             name: pickedStudent ? pickedStudent.name : '',
@@ -219,7 +220,7 @@ function createApi({ store }) {
           return { recordId: null, next: null, roundEnded: true };
         }
         const { id } = await store.createRoll({ sno: next.sno, mode: 'sequence' });
-        return { recordId: id, next, roundEnded };
+        return { recordId: id, next, roundEnded, calledAt: (await store.getRoll(id)).calledAt };
       });
     },
 
@@ -292,6 +293,45 @@ function createApi({ store }) {
           deltas: outcome.deltas,
           delta: outcome.delta,
           score: updated.score,
+        };
+      });
+    },
+
+    // 只读恢复：同一事务读取记录与当前学生，绝不重新执行结算。
+    async getRecord({ id: idIn } = {}) {
+      const id = toPositiveInt(idIn, 0);
+      if (!id) throw new ApiError('VALIDATION_ERROR', '记录 ID 非法');
+      return store.withTransaction(async (tx) => {
+        const record = await tx.getRoll(id);
+        if (!record) throw new ApiError('NOT_FOUND', '点名记录不存在或服务已重启');
+        const student = await tx.findStudent(record.sno);
+        if (!student) throw new ApiError('NOT_FOUND', '记录对应的学生不存在');
+        const settled = record.settled === 1;
+        let settlement = null;
+        if (settled) {
+          const outcome = Scorer.settle(
+            { sno: record.sno, currentScore: 0 },
+            {
+              present: record.present,
+              repeat: record.repeatResult,
+              answerBonus: record.answerBonus,
+            }
+          );
+          settlement = {
+            recordId: id,
+            sno: record.sno,
+            deltas: outcome.deltas,
+            delta: record.delta,
+            score: student.score,
+          };
+        }
+        return {
+          recordId: id,
+          calledAt: record.calledAt,
+          mode: record.mode,
+          student,
+          settled,
+          settlement,
         };
       });
     },
@@ -369,6 +409,13 @@ function createApi({ store }) {
 
 // 路由表：路径 → 处理函数。params 来自路径捕获组，query 来自查询串，body 来自请求体。
 const ROUTES = [
+  {
+    method: 'GET',
+    re: /^\/api\/roll\/(\d+)\/?$/,
+    handler: 'getRecord',
+    input: 'query',
+    keys: ['id'],
+  },
   { method: 'GET', re: /^\/api\/students\/?$/, handler: 'listStudents', input: 'query' },
   { method: 'POST', re: /^\/api\/import\/validate\/?$/, handler: 'validateImport', input: 'body' },
   { method: 'POST', re: /^\/api\/import\/commit\/?$/, handler: 'commitImport', input: 'body' },
