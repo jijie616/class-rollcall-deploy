@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#3867f4" />
+    <title>点名有数 · 课堂工作台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/css/style.css" />
+    <script src="/lib/xlsx.full.min.js" defer></script>
+    <script src="/lib/chart.umd.js" defer></script>
+    <script type="module" src="/js/main.js"></script>
+  </head>
+  <body>
+    <a class="rc-skip" href="#main">跳到主要内容</a>
+    <aside class="rc-sidebar">
+      <a class="rc-brand" href="#classroom">点名有数</a>
+      <p class="rc-muted">让每次课堂互动都有记录</p>
+      <nav aria-label="工作台导航">
+        <button class="rc-nav rc-nav--active" data-page="classroom" aria-current="page">
+          课堂点名
+        </button>
+        <button class="rc-nav" data-page="students">学生名单</button>
+        <button class="rc-nav" data-page="ranking">积分排行</button>
+      </nav>
+      <div class="rc-sidebar__foot">
+        <strong>课堂工作台</strong>
+        <p class="rc-muted" id="sidebarCount">正在读取名单</p>
+      </div>
+    </aside>
+    <main id="main" class="rc-main" tabindex="-1">
+      <header class="rc-header">
+        <div>
+          <p class="rc-eyebrow">课堂工作台</p>
+          <h1 id="pageTitle">课堂点名</h1>
+          <p class="rc-muted" id="pageDescription">从一次公平点名开始，让课堂参与有迹可循。</p>
+        </div>
+        <span class="rc-badge" id="connectionStatus" role="status">正在连接服务</span>
+      </header>
+      <div id="notice" class="rc-notice" role="alert" hidden>
+        <span id="noticeText"></span><button id="dismissNotice" aria-label="关闭提示">×</button>
+      </div>
+      <section id="page-classroom" aria-label="课堂点名">
+        <div class="rc-classroom-grid">
+          <article class="rc-card rc-stage" id="rollStage">
+            <div class="rc-stage__top">
+              <div>
+                <p class="rc-eyebrow">TODAY’S CLASS</p>
+                <h2>课堂互动</h2>
+              </div>
+              <button class="rc-text-button" id="exitBig" hidden>退出大屏</button>
+            </div>
+            <div class="rc-tabs" role="group" aria-label="点名模式">
+              <button data-mode="random" class="rc-button rc-button--primary" aria-pressed="true">
+                随机点名</button
+              ><button data-mode="sequence" class="rc-button" aria-pressed="false">
+                按学号顺序
+              </button>
+            </div>
+            <p class="rc-muted" id="modeHint">积分越高，随机被点到的概率越低</p>
+            <div class="rc-result" aria-live="polite" aria-atomic="true">
+              <p class="rc-muted" id="resultCaption">准备好开始课堂互动了吗？</p>
+              <h2 id="studentName">每个人，都有机会</h2>
+              <p id="studentMeta" class="rc-muted">请选择模式，然后开始点名</p>
+              <span id="resultScore" class="rc-badge" hidden></span>
+            </div>
+            <div class="rc-actions">
+              <button
+                id="rollButton"
+                class="rc-button rc-button--primary rc-button--wide"
+                data-busy
+              >
+                开始随机点名</button
+              ><button id="scoreButton" class="rc-button rc-button--primary" hidden data-busy>
+                登记课堂表现</button
+              ><button id="bigButton" class="rc-button">大屏展示</button>
+            </div>
+            <p class="rc-small rc-muted" id="rollHelp">点名后登记表现，保存后再进行下一次点名</p>
+          </article>
+          <aside class="rc-info-column">
+            <article class="rc-card">
+              <h2>课堂概览</h2>
+              <dl class="rc-stats">
+                <div>
+                  <dt>学生人数</dt>
+                  <dd id="studentTotal">—</dd>
+                </div>
+                <div>
+                  <dt>本页会话点名</dt>
+                  <dd id="sessionCalls">0</dd>
+                </div>
+                <div>
+                  <dt>本页待结算</dt>
+                  <dd id="pendingCalls">0</dd>
+                </div>
+              </dl>
+              <p class="rc-small rc-muted">会话统计从本次打开页面开始。</p>
+            </article>
+            <article class="rc-card">
+              <h2>公平，看得见</h2>
+              <p class="rc-muted">
+                积分影响抽签权重，负积分同学仍可正常参与。抽签和积分结算均由服务端完成。
+              </p>
+              <button class="rc-button" id="probabilityButton">了解抽签规则</button>
+            </article>
+          </aside>
+        </div>
+        <article class="rc-card rc-recent">
+          <h3>最近一次课堂记录</h3>
+          <p class="rc-muted" id="recentRecord">还没有课堂记录，从第一次点名开始吧。</p>
+        </article>
+      </section>
+      <section id="page-students" hidden aria-label="学生名单">
+        <article class="rc-card">
+          <div class="rc-toolbar">
+            <div>
+              <h2>班级学生名单</h2>
+              <p class="rc-muted">按学号排列 · 积分与随机点名次数同步展示</p>
+            </div>
+            <div class="rc-actions">
+              <button class="rc-button" data-export data-busy>导出积分详单</button
+              ><button class="rc-button rc-button--primary" id="importButton" data-busy>
+                导入 Excel 名单
+              </button>
+            </div>
+          </div>
+          <div id="studentTable" class="rc-table-wrap"></div>
+          <p class="rc-small rc-muted">
+            导入前会先校验并确认；已有学号只更新姓名和专业，积分与次数保留。
+          </p>
+        </article>
+      </section>
+      <section id="page-ranking" hidden aria-label="积分排行">
+        <article class="rc-card">
+          <div class="rc-toolbar">
+            <div>
+              <h2>课堂积分榜</h2>
+              <p class="rc-muted">积分降序，同分按学号排序</p>
+            </div>
+            <div class="rc-actions">
+              <label
+                >显示
+                <select id="rankingLimit" data-busy>
+                  <option value="10">前 10 名</option>
+                  <option value="20">前 20 名</option>
+                  <option value="50">前 50 名</option>
+                </select></label
+              ><button class="rc-button" id="refreshRanking" data-busy>刷新排行</button
+              ><button class="rc-button rc-button--primary" data-export data-busy>
+                导出完整详单
+              </button>
+            </div>
+          </div>
+          <p id="rankingSummary" class="rc-small rc-muted">进入页面后读取最新排行。</p>
+          <div id="chartEmpty" class="rc-empty" hidden>暂无积分数据，请先导入学生名单。</div>
+          <div class="rc-chart" id="chartWrap">
+            <canvas
+              id="rankingChart"
+              role="img"
+              aria-label="积分柱状图和随机点名次数折线图，具体数据见下方表格"
+            ></canvas>
+          </div>
+          <div id="rankingTable" class="rc-table-wrap"></div>
+        </article>
+      </section>
+    </main>
+    <input id="importFile" type="file" accept=".xlsx,.xls,.csv" hidden />
+    <dialog id="scoreDialog" class="rc-dialog" aria-labelledby="scoreTitle">
+      <form id="scoreForm">
+        <div class="rc-dialog__header">
+          <div>
+            <p class="rc-eyebrow">CLASSROOM PERFORMANCE</p>
+            <h2 id="scoreTitle">登记课堂表现</h2>
+          </div>
+          <button type="button" class="rc-close" data-close="scoreDialog" aria-label="关闭积分面板">
+            ×
+          </button>
+        </div>
+        <p id="scoreStudent" class="rc-muted"></p>
+        <fieldset>
+          <legend>到场情况</legend>
+          <label><input type="radio" name="present" value="1" checked /> 已到场（+1）</label
+          ><label><input type="radio" name="present" value="0" /> 未到场（+0）</label>
+        </fieldset>
+        <fieldset id="repeatFields">
+          <legend>复述问题</legend>
+          <label><input type="radio" name="repeat" value="none" checked /> 未提问（不评）</label
+          ><label><input type="radio" name="repeat" value="accurate" /> 准确复述（+0.5）</label
+          ><label><input type="radio" name="repeat" value="inaccurate" /> 未准确复述（−1）</label>
+        </fieldset>
+        <label class="rc-field"
+          >回答加分<select name="answerBonus" id="answerBonus">
+            <option value="0">未获回答分 · 0</option>
+            <option value="0.5">+0.5</option>
+            <option value="1">+1</option>
+            <option value="1.5">+1.5</option>
+            <option value="2">+2</option>
+            <option value="2.5">+2.5</option>
+            <option value="3">+3</option>
+          </select></label
+        >
+        <p class="rc-muted rc-small">未到场时跳过复述与回答评分。保存结果以服务端返回为准。</p>
+        <div class="rc-dialog__footer">
+          <button type="button" class="rc-button" data-close="scoreDialog">暂不登记</button
+          ><button type="submit" class="rc-button rc-button--primary" data-busy>保存积分</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="importDialog" class="rc-dialog" aria-labelledby="importTitle">
+      <div class="rc-dialog__header">
+        <h2 id="importTitle">确认导入名单</h2>
+        <button class="rc-close" id="cancelImportX" aria-label="取消导入" data-busy>×</button>
+      </div>
+      <div id="importPreview"></div>
+      <div class="rc-dialog__footer">
+        <button id="cancelImport" class="rc-button" data-busy>取消导入</button
+        ><button id="confirmImport" class="rc-button rc-button--primary" data-busy>确认导入</button>
+      </div>
+    </dialog>
+    <dialog id="exportDialog" class="rc-dialog" aria-labelledby="exportTitle">
+      <h2 id="exportTitle">导出积分详单</h2>
+      <p class="rc-muted">
+        导出时读取服务端最新完整名单，包含学号、姓名、专业、随机点名次数与总积分，不受排行榜人数限制。
+      </p>
+      <div class="rc-dialog__footer">
+        <button class="rc-button" data-close="exportDialog">取消</button
+        ><button class="rc-button rc-button--primary" id="confirmExport" data-busy>
+          下载 Excel
+        </button>
+      </div>
+    </dialog>
+    <dialog id="probabilityDialog" class="rc-dialog" aria-labelledby="probabilityTitle">
+      <div class="rc-dialog__header">
+        <h2 id="probabilityTitle">抽签概率</h2>
+        <button class="rc-close" data-close="probabilityDialog" aria-label="关闭概率说明">×</button>
+      </div>
+      <p class="rc-muted">
+        权重公式：<code>w = 1 / (1 + score − minScore)</code
+        >。同一份名单中积分越高，概率越低；全员同分时概率相同。
+      </p>
+      <p>当前版本暂不提供实时概率明细。每次点名使用当时名单与积分计算权重。</p>
+    </dialog>
+    <noscript>请启用 JavaScript 后使用课堂点名系统。</noscript>
+  </body>
+</html>
