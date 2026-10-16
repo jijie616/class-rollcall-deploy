@@ -17,8 +17,9 @@
     "start": "node server/index.js",
     "start:mysql": "node server/start-mysql.js"
   },
-  "dependencies": {},
-  "devDependencies": {},
+  "dependencies": {
+    "mysql2": "^3.24.6"
+  },
   "engines": {
     "node": ">=18"
   }

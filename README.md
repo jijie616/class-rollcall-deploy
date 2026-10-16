@@ -20,16 +20,16 @@
 
 ## 当前进度
 
-**2026-10-15 联调版本**：已接入杨泓的正式前端，补齐搜索分页、当前概率表、随机复演、本页刷新恢复和结算异常核验。最新契约见 [联调接口与恢复说明](docs/联调接口与恢复说明_20261015.md)。真实 MySQL、线上部署和最终交付仍待完成。
+**2026-10-16 更新**：正式前端与本轮联调功能已接通；真实 SQLPub MySQL 8.0.41 的建表、持久化、并发和事务回滚验收已完成，见 [真实 MySQL 验收](docs/真实MySQL验收_20261016.md)。线上部署和最终交付仍待完成。最新交互契约见 [联调接口与恢复说明](docs/联调接口与恢复说明_20261015.md)。
 
 | 模块 | 内容 | 状态 |
 | :-- | :-- | :-- |
 | A1 | 工程脚手架 | ✅ 目录、README、`.prettierrc`、`.gitignore`、`package.json` |
-| A2 | 数据库设计 | ⚠️ `sql/schema.sql` 已写好，**尚未在真实主机执行过** |
+| A2 | 数据库设计 | ✅ 三张 InnoDB 表已在真实 SQLPub MySQL 8.0.41 创建，无警告；其他版本未验收 |
 | A3 | Excel 名单导入 | ✅ `src/js/importer.js`（表头识别、行校验、数字型学号告警），23 项测试通过 |
 | A4/A5 | 加权随机抽签 / 顺序点名 | ✅ `server/lottery.js`，23 项测试通过 |
 | A6 | 积分结算引擎 | ✅ `server/scorer.js`，24 项测试通过 |
-| A7 | HTTP 中间层 | ✅ 12 个端点（新增单条记录恢复查询），事务与恢复回归通过。⚠️ `server/store-mysql.js` **未在真实 MySQL 上验证** |
+| A7 | HTTP 中间层 | ✅ 12 个端点；真实 MySQL 持久化、并发结算、失败回滚及恢复查询通过 |
 | A8 | 主控状态机 | ✅ `src/js/app.js` + `src/js/api.js`（前端 HTTP 客户端），24 项测试通过（用桩件替 ui.js，连真实服务跑） |
 | A9 | 部署上线 | ⬜ 待做 |
 | A10 | 统一测试 | ✅ 9 个测试文件，包含图表、导出与联调回归，见下表 |
@@ -67,7 +67,7 @@ class-rollcall/
 │  ├─ scorer.js              # A6 积分结算
 │  ├─ errors.js              # 统一错误码与响应信封
 │  ├─ store-memory.js        # 内存存储（开发/测试用，无需数据库）
-│  ├─ store-mysql.js         # MySQL 存储（部署用，⚠️ 未验证）
+│  ├─ store-mysql.js         # MySQL 存储（已验收 SQLPub 8.0.41）
 │  └─ start-mysql.js         # MySQL 模式启动器（读 .env）
 ├─ src/
 │  ├─ index.html             # 正式界面，根路径访问
@@ -109,7 +109,7 @@ node server/index.js            # → http://127.0.0.1:8787/
 node tests/smoke-e2e.js          # 默认连接 8787；会写入测试数据，请仅对演示/测试库执行
 ```
 
-单元测试只用 Node 内置的 `assert`，不引入测试框架，`npm install` 不装任何东西（MySQL 模式才需要 `npm i mysql2`）。
+测试只用 Node 内置的 `assert`，不引入测试框架，内存模式无需安装依赖。MySQL 驱动 mysql2 已登记到 package.json 和 package-lock.json，克隆后使用 `npm ci` 安装固定依赖，再填写本地 .env，执行 `npm run start:mysql` 启动真实数据库模式。
 
 **MySQL 模式**：复制 `.env.example` 为 `.env` 填好凭据，然后 `npm run start:mysql`。数据库口令只存在于服务进程的环境变量里，前端永远拿不到。
 
@@ -160,8 +160,8 @@ SheetJS 已实测：生成 xlsx → 回读 → 文本型学号 `0012345` 的前�
 
 以下内容**尚未验证**，不要在文档或博客中当作已完成陈述：
 
-1. `sql/schema.sql` 未在真实 MySQL 主机上执行过（尤其是 MySQL 5.5 的行为）。
-2. `server/store-mysql.js` 未在真实 MySQL 上跑过任何一条 SQL——内存存储的测试结论**不能直接外推到它**。部署时须先实跑建表，再走一遍完整的增删改查。
+1. MySQL 5.5 等其他主机及版本尚未实测；当前已验收 SQLPub MySQL 8.0.41，不外推到所有版本。
+2. 更换数据库或部署主机后，需要重新验证连接、表结构和完整业务链路；当前数据库验收范围见 10/16 记录。
 3. 托管环境能否出网连接 3306（本机已实测可用，托管环境未验）。
 4. 作业平台 `code.educoder.net/projects` 是否支持合并请求（MR）。
 5. 免费 MySQL 主机的注册与续期规则。
