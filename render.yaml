@@ -1,0 +1,32 @@
+# 在 GitHub 部署副本中使用；不要在这里填写数据库密码或访问口令。
+services:
+  - type: web
+    name: class-rollcall
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm run start:mysql
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '24'
+      - key: STORE
+        value: mysql
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: APP_ACCESS_USER
+        sync: false
+      - key: APP_ACCESS_PASSWORD
+        sync: false

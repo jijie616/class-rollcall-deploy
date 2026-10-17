@@ -1,0 +1,17 @@
+{
+  "passed": 12,
+  "events": [
+    "Created three InnoDB tables in the previously empty database",
+    "Import preview does not write rows",
+    "Import, text leading-zero identifiers, search and paging work on MySQL",
+    "Negative scores, random draw, persisted snapshot and replay agree",
+    "Settlement adds 4.5 once, duplicate returns 409, result lookup restores original components",
+    "Sequential draw preserves random count and zero-delta absence settles correctly",
+    "Concurrent settlement of one record commits only one increment",
+    "Concurrent distinct records for one student retain both increments",
+    "Injected log failure rolls back status and score on real MySQL; retry succeeds",
+    "Failed batch import rolls back; successful duplicate import preserves score and count",
+    "Fresh server and pool preserve students, scores, counters and settled records",
+    "Removed only tagged acceptance rows; business tables are empty again"
+  ]
+}

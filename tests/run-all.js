@@ -16,6 +16,7 @@ const FILES = [
   'test-chart.js',
   'test-exporter.js',
   'test-integration.js',
+  'test-deployment.js',
 ];
 
 let failed = 0;

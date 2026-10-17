@@ -20,6 +20,7 @@ const path = require('path');
 const { createApi, matchRoute } = require('./api.js');
 const { createMemoryStore } = require('./store-memory.js');
 const { ApiError, ok, fail, toErrorBody } = require('./errors.js');
+const { createAccessGate } = require('./access.js');
 
 const PORT = Number(process.env.PORT || 8787);
 const STORE_KIND = String(process.env.STORE || 'memory');
@@ -103,7 +104,13 @@ function sendJson(res, status, body) {
 
 /** 静态文件托管：仅允许 src/ 与 lib/ 两个目录，阻断路径穿越 */
 function serveStatic(req, res, pathname) {
-  const rel = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
+  let rel;
+  try {
+    rel = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
+  } catch {
+    sendJson(res, 400, fail('VALIDATION_ERROR', '非法路径编码'));
+    return;
+  }
   if (rel.includes('..')) {
     sendJson(res, 400, fail('VALIDATION_ERROR', '非法路径'));
     return;
@@ -119,12 +126,50 @@ function serveStatic(req, res, pathname) {
   fs.createReadStream(file).pipe(res);
 }
 
-function createServer({ store } = {}) {
-  const api = createApi({ store: store || buildStore() });
+function createServer({ store, accessEnv = process.env } = {}) {
+  const allow = createAccessGate(accessEnv);
+  const activeStore = store || buildStore();
+  const api = createApi({ store: activeStore });
 
   return http.createServer(async (req, res) => {
-    const url = new URL(req.url, 'http://localhost');
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+    } catch {
+      sendJson(res, 400, fail('VALIDATION_ERROR', '非法请求地址'));
+      return;
+    }
     const pathname = url.pathname;
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+
+    // 只暴露就绪状态，不返回学生、数据库地址、账号或异常详情。
+    if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/healthz') {
+      try {
+        await activeStore.listStudents({ pageSize: 1 });
+        sendJson(res, 200, { ok: true });
+      } catch {
+        sendJson(res, 503, { ok: false });
+      }
+      return;
+    }
+    if (!allow(req, res)) return;
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      let sameOrigin = true;
+      if (req.headers.origin) {
+        try {
+          const origin = new URL(req.headers.origin);
+          sameOrigin =
+            ['http:', 'https:'].includes(origin.protocol) && origin.host === req.headers.host;
+        } catch {
+          sameOrigin = false;
+        }
+      }
+      if (!sameOrigin || req.headers['sec-fetch-site'] === 'cross-site') {
+        sendJson(res, 403, fail('FORBIDDEN', '不允许跨站提交课堂操作'));
+        return;
+      }
+    }
 
     if (!pathname.startsWith('/api/')) {
       serveStatic(req, res, pathname);
@@ -156,7 +201,7 @@ function createServer({ store } = {}) {
 
 function startServer({ port = PORT, store } = {}) {
   const server = createServer({ store });
-  server.listen(port, () => {
+  server.listen(port, '0.0.0.0', () => {
     console.log('课堂随机点名系统 · 中间层已启动');
     console.log('  地址：http://127.0.0.1:' + server.address().port + '/');
     console.log('  存储：' + STORE_KIND);

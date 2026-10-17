@@ -1,0 +1,2 @@
+# 验收归档按原始字节保存，避免 Windows 换行转换使 SHA256 校验失效。
+docs/validation/** -text

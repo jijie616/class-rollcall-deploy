@@ -1,0 +1,14 @@
+{
+  "tables": [
+    {
+      "Tables_in_class_rollcall": "roll_records"
+    },
+    {
+      "Tables_in_class_rollcall": "score_logs"
+    },
+    {
+      "Tables_in_class_rollcall": "students"
+    }
+  ],
+  "warnings": []
+}
