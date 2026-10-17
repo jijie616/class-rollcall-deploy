@@ -27,6 +27,23 @@ const STORE_KIND = String(process.env.STORE || 'memory');
 const SRC_DIR = path.join(__dirname, '..', 'src');
 const LIB_DIR = path.join(__dirname, '..', 'lib');
 
+// 健康检查日志仅允许已知错误码，不能直接打印驱动异常、SQL 或环境变量。
+const HEALTH_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'PROTOCOL_CONNECTION_LOST',
+  'ER_ACCESS_DENIED_ERROR',
+  'ER_BAD_DB_ERROR',
+  'ER_NO_SUCH_TABLE',
+  'ER_CON_COUNT_ERROR',
+  'ER_USER_LIMIT_REACHED',
+  'ERR_SOCKET_BAD_PORT',
+  'DB_UNAVAILABLE',
+]);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -130,6 +147,8 @@ function createServer({ store, accessEnv = process.env } = {}) {
   const allow = createAccessGate(accessEnv);
   const activeStore = store || buildStore();
   const api = createApi({ store: activeStore });
+  let lastHealthCode = '';
+  let nextHealthLogAt = 0;
 
   return http.createServer(async (req, res) => {
     let url;
@@ -147,8 +166,18 @@ function createServer({ store, accessEnv = process.env } = {}) {
     if ((req.method === 'GET' || req.method === 'HEAD') && pathname === '/healthz') {
       try {
         await activeStore.listStudents({ pageSize: 1 });
+        lastHealthCode = '';
+        nextHealthLogAt = 0;
         sendJson(res, 200, { ok: true });
-      } catch {
+      } catch (error) {
+        const candidate = error && (error.dbCode || error.code);
+        const code = HEALTH_ERROR_CODES.has(candidate) ? candidate : 'UNKNOWN';
+        const now = Date.now();
+        if (code !== lastHealthCode || now >= nextHealthLogAt) {
+          console.error('[healthz] 数据库就绪检查失败 code=' + code);
+          lastHealthCode = code;
+          nextHealthLogAt = now + 30000;
+        }
         sendJson(res, 503, { ok: false });
       }
       return;

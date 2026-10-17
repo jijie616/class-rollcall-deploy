@@ -38,5 +38,6 @@ if (missing.length > 0) {
 }
 
 console.log('以 MySQL 模式启动，目标库：' + process.env.DB_NAME + '@' + process.env.DB_HOST);
+console.log('  数据库端口：' + (Number(process.env.DB_PORT || 3306) || 3306));
 const { startServer } = require('./index.js');
 startServer();

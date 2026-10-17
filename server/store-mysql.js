@@ -24,7 +24,10 @@ function wrapDbError(err) {
     code === 'ER_BAD_DB_ERROR' ||
     code === 'ER_NO_SUCH_TABLE'
   ) {
-    return new ApiError('DB_UNAVAILABLE', '数据库连接或表结构异常（' + code + '）');
+    const wrapped = new ApiError('DB_UNAVAILABLE', '数据库连接或表结构异常（' + code + '）');
+    // 仅保留驱动错误码供服务端诊断，不携带原始 SQL、参数或连接凭据。
+    wrapped.dbCode = code;
+    return wrapped;
   }
   return err;
 }

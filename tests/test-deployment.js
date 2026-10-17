@@ -5,6 +5,7 @@ const { spawn } = require('node:child_process');
 const http = require('node:http');
 const { createServer, DEMO_ROSTER } = require('../server/index.js');
 const { createMemoryStore } = require('../server/store-memory.js');
+const { createMysqlStore } = require('../server/store-mysql.js');
 const { createAccessGate } = require('../server/access.js');
 const env = {
   NODE_ENV: 'production',
@@ -108,6 +109,50 @@ async function withServer(work, { store = createMemoryStore(DEMO_ROSTER), access
         },
       }
     ));
+  await test('MySQL 健康诊断保留错误码、抑制重复日志，恢复后能再次报告且不泄露异常内容', async () => {
+    let failureCode = 'ECONNREFUSED';
+    const secret = 'private-password-and-sql-parameters';
+    const logs = [];
+    const originalError = console.error;
+    const store = createMysqlStore({}, {
+      pool: {
+        async query(sql) {
+          if (failureCode) throw Object.assign(new Error(secret), { code: failureCode, sql: secret });
+          return [sql.startsWith('SELECT COUNT(*)') ? [{ n: 0 }] : []];
+        },
+      },
+    });
+    console.error = (...args) => logs.push(args.join(' '));
+    try {
+      await withServer(async (base) => {
+        async function unhealthy() {
+          const response = await fetch(base + '/healthz');
+          assert.equal(response.status, 503);
+          assert.deepEqual(await response.json(), { ok: false });
+        }
+        await unhealthy();
+        await unhealthy();
+        assert.equal(logs.length, 1);
+        assert.ok(logs[0].endsWith('code=ECONNREFUSED'));
+        failureCode = 'ER_ACCESS_DENIED_ERROR';
+        await unhealthy();
+        assert.equal(logs.length, 2);
+        assert.ok(logs[1].endsWith('code=ER_ACCESS_DENIED_ERROR'));
+        failureCode = '';
+        assert.equal((await fetch(base + '/healthz')).status, 200);
+        failureCode = 'ECONNREFUSED';
+        await unhealthy();
+        assert.equal(logs.length, 3);
+        failureCode = secret;
+        await unhealthy();
+        assert.equal(logs.length, 4);
+        assert.ok(logs[3].endsWith('code=UNKNOWN'));
+        assert.ok(!logs.join('\n').includes(secret));
+      }, { store });
+    } finally {
+      console.error = originalError;
+    }
+  });
   await test('跨站或不明来源的写请求被拒绝，同源已认证操作可继续', () =>
     withServer(async (base, store) => {
       for (const extra of [
@@ -179,6 +224,7 @@ async function withServer(work, { store = createMemoryStore(DEMO_ROSTER), access
           ...env,
           PORT: '0',
           DB_HOST: 'test.invalid',
+          DB_PORT: '3312',
           DB_USER: 'test',
           DB_PASSWORD: 'test',
           DB_NAME: 'test',
@@ -213,6 +259,7 @@ async function withServer(work, { store = createMemoryStore(DEMO_ROSTER), access
       assert.equal((await fetch(base + '/')).status, 401);
       assert.equal((await fetch(base + '/', { headers: { authorization } })).status, 200);
       assert.ok(!output.includes(env.APP_ACCESS_PASSWORD));
+      assert.ok(output.includes('数据库端口：3312'));
     } finally {
       child.kill();
       await exited;
